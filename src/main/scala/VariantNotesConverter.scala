@@ -16,7 +16,7 @@ object VariantNotesConverter {
           case 'A' => 2
           case 'T' => -2
         }
-        ((pitch + (delta * idx)) % (pianoPitchRange.max - pianoPitchRange.min)) + pianoPitchRange.min
+        ((pitch + (delta * (idx + 1))) % (pianoPitchRange.max - pianoPitchRange.min)) + pianoPitchRange.min
       }
     }
   }
