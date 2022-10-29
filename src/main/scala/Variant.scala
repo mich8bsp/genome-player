@@ -6,7 +6,7 @@ case class Variant(chr: Chrom, pos: Long, ref: Option[String], alt: Option[Strin
 
 object Variant {
   type Chrom = String
-  private val supportedChromosomes = ((1 to 22) ++ Seq("X, Y, M")).map(c => s"chr$c").toSet
+  private val supportedChromosomes = ((1 to 22) ++ Seq("X", "Y", "M")).map(c => s"chr$c").toSet
 
   private def parseRefAlt(refAlt: String): Option[String] = {
     Some(refAlt)

@@ -7,5 +7,5 @@ lazy val root = (project in file("."))
     libraryDependencies ++= Seq(
       "de.sciss" %% "scalamidi" % "0.2.1",
       "org.typelevel" %% "cats-core" % "2.8.0"),
-      name := "genome-player"
+    name := "genome-player"
   )
