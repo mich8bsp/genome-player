@@ -3,22 +3,40 @@ import Variant.Chrom
 import cats.data.Chain
 import de.sciss.midi.{Event, NoteOff, NoteOn, Sequence, TickRate, Track}
 
+import scala.collection.mutable
+
 object VariantNotesConverter {
   private implicit val rate: TickRate = TickRate.tempo(bpm = 120, tpq = 1024)
   private val pianoPitchRange = 21 to 108
+  private val baseGroupsCache: mutable.Map[Int, Seq[String]] = mutable.Map[Int, Seq[String]]()
+
+  private lazy val baseGroups = baseGroupsOfLength(3) ++ baseGroupsOfLength(2) ++ baseGroupsOfLength(1)
+  private lazy val baseGroupToPitch = baseGroups.zipWithIndex.map {
+    case (group, idx) if idx % 2 == 0 =>
+      group -> (pianoPitchRange.head + (idx / 2))
+    case (group, idx) =>
+      group -> (pianoPitchRange.last - (idx / 2))
+  }.toMap
+
+
+  def baseGroupsOfLength(n: Int): Seq[String] = n match {
+    case 1 => Seq("C", "G", "A", "T")
+    case _ =>
+      for {
+        prev <- baseGroupsCache.getOrElseUpdate(n-1, baseGroupsOfLength(n-1))
+        addition <- baseGroupsCache.getOrElseUpdate(1, baseGroupsOfLength(1))
+      } yield {
+        s"$prev$addition"
+      }
+  }
 
   def refAltToPitch(refAlt: String): Int = {
-    refAlt.zipWithIndex.foldLeft((pianoPitchRange.min + pianoPitchRange.max) / 2) {
-      case (pitch, (base, idx)) => {
-        val delta = base match {
-          case 'C' => 1
-          case 'G' => -1
-          case 'A' => 2
-          case 'T' => -2
-        }
-        ((pitch + (delta * (idx + 1))) % (pianoPitchRange.max - pianoPitchRange.min)) + pianoPitchRange.min
-      }
-    }
+   refAlt.grouped(3)
+      .map(baseGroupToPitch)
+      .toSeq
+      .groupBy(identity)
+      .maxBy(_._2.length)
+      ._1
   }
 
   private def qualityToVelocity(qual: Double): Int = {
@@ -26,7 +44,7 @@ object VariantNotesConverter {
   }
 
   private def positionToTime(pos: Long): Int = {
-    (pos / 1000000).toInt
+    (pos / 500000).toInt
   }
 
   def variantToNotes(variant: Variant): (Option[Note], Option[Note]) = {
@@ -46,7 +64,12 @@ object VariantNotesConverter {
       length = 1,
       title = variant.chr))
 
-    (refNote, altNote)
+    (refNote.map(_.pitch), altNote.map(_.pitch)) match {
+      case (Some(refPitch), Some(altPitch)) if math.abs(refPitch - altPitch) < 3 && math.abs(refPitch - altPitch) > 0 =>
+        (refNote, altNote.map(_.copy(pitch = altPitch + 3 - math.abs(refPitch - altPitch))))
+      case _ => (refNote, altNote)
+    }
+
   }
 
   def addNoteToChannel(note: Note, chain: Chain[Note]): Chain[Note] = {
@@ -58,6 +81,7 @@ object VariantNotesConverter {
   }
 
   def noteToEvents(note: Note): Seq[Event] = {
+    val noteLength = math.min(note.length, 16)
     Seq(
       Event(
         tick = (note.time * 0.25 * rate.value).toLong,
@@ -68,7 +92,7 @@ object VariantNotesConverter {
         )
       ),
       Event(
-        tick = ((note.time + note.length) * 0.25 * rate.value).toLong,
+        tick = ((note.time + noteLength) * 0.25 * rate.value).toLong,
         message = NoteOff(
           channel = note.channel,
           pitch = note.pitch,
@@ -91,7 +115,7 @@ object VariantNotesConverter {
     (channel1 ++ channel2)
       .toList
       .groupBy(_.title)
-      .mapValues(_.flatMap(noteToEvents))
+      .mapValues(_.sortBy(_.time).flatMap(noteToEvents))
       .mapValues(events => Track(events.toVector))
       .mapValues(track => Sequence(Vector(track)))
   }
