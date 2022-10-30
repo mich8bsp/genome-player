@@ -3,19 +3,35 @@ import Variant.Chrom
 import cats.data.Chain
 import de.sciss.midi.{Event, NoteOff, NoteOn, Sequence, TickRate, Track}
 
-import scala.collection.mutable
+import scala.collection.{Seq, mutable}
+import scala.util.Random
 
 object VariantNotesConverter {
   private implicit val rate: TickRate = TickRate.tempo(bpm = 120, tpq = 1024)
   private val pianoPitchRange = 21 to 108
+  private val startNote = Random.nextInt(12) + pianoPitchRange.start
+  private val minorScaleIntervals = Seq(2, 1, 2, 2, 1, 3, 1)
+  private val majorScaleIntervals = Seq(2, 2, 1, 2, 2, 2, 1)
+  private val scaleIntervals = minorScaleIntervals
+  private val scalePitches: Seq[Int] = {
+    val builder: mutable.Buffer[Int] = mutable.Buffer[Int]()
+    var currentNote = startNote
+    var idx = 0
+    while (currentNote <= pianoPitchRange.end) {
+      builder.append(currentNote)
+      currentNote += scaleIntervals(idx)
+      idx = (idx + 1) % scaleIntervals.size
+    }
+    builder
+  }
   private val baseGroupsCache: mutable.Map[Int, Seq[String]] = mutable.Map[Int, Seq[String]]()
 
   private lazy val baseGroups = baseGroupsOfLength(3) ++ baseGroupsOfLength(2) ++ baseGroupsOfLength(1)
-  private lazy val baseGroupToPitch = baseGroups.zipWithIndex.map {
+  private lazy val baseGroupToPitch = baseGroups.reverse.zipWithIndex.map {
     case (group, idx) if idx % 2 == 0 =>
-      group -> (pianoPitchRange.head + (idx / 2))
+      group -> (scalePitches(idx / 4))
     case (group, idx) =>
-      group -> (pianoPitchRange.last - (idx / 2))
+      group -> (scalePitches(scalePitches.length - idx / 4 - 1))
   }.toMap
 
 
