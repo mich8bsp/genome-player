@@ -1,13 +1,13 @@
-import Note.maxVelocity
 import Variant.Chrom
 import cats.data.Chain
-import de.sciss.midi.{Event, NoteOff, NoteOn, Sequence, TickRate, Track}
+import de.sciss.midi._
 
 import scala.collection.{Seq, mutable}
 import scala.util.Random
 
 object VariantNotesConverter {
   private implicit val rate: TickRate = TickRate.tempo(bpm = 120, tpq = 1024)
+  private val maxVelocity = 127
   private val pianoPitchRange = 21 to 108
   private val startNote = Random.nextInt(12) + pianoPitchRange.start
   private val minorScaleIntervals = Seq(2, 1, 2, 2, 1, 3, 1)
@@ -24,6 +24,9 @@ object VariantNotesConverter {
     }
     builder
   }
+
+  private val scalePitchesToIdx: Map[Int, Int] = scalePitches.zipWithIndex.toMap
+
   private val baseGroupsCache: mutable.Map[Int, Seq[String]] = mutable.Map[Int, Seq[String]]()
 
   private lazy val baseGroups = baseGroupsOfLength(3) ++ baseGroupsOfLength(2) ++ baseGroupsOfLength(1)
@@ -80,18 +83,13 @@ object VariantNotesConverter {
       length = 1,
       title = variant.chr))
 
-    (refNote.map(_.pitch), altNote.map(_.pitch)) match {
-      case (Some(refPitch), Some(altPitch)) if math.abs(refPitch - altPitch) < 3 && math.abs(refPitch - altPitch) > 0 =>
-        (refNote, altNote.map(_.copy(pitch = altPitch + 3 - math.abs(refPitch - altPitch))))
-      case _ => (refNote, altNote)
-    }
-
+    (refNote, altNote)
   }
 
   def addNoteToChannel(note: Note, chain: Chain[Note]): Chain[Note] = {
     chain.uncons match {
       case Some((head, tail)) if head.title == note.title && head.time == note.time && head.channel == note.channel =>
-        tail.prepend(Note.combine(head, note))
+        tail.prepend(combine(head, note))
       case _ => chain.prepend(note)
     }
   }
@@ -135,22 +133,12 @@ object VariantNotesConverter {
       .mapValues(events => Track(events.toVector))
       .mapValues(track => Sequence(Vector(track)))
   }
-}
 
-case class Note(
-                 channel: Int,
-                 pitch: Int,
-                 velocity: Int,
-                 time: Int,
-                 length: Int,
-                 title: String
-               )
-
-object Note {
-  val maxVelocity = 127
 
   def combinePitches(pitch1: Int, pitch2: Int): Int = {
-    (pitch1 + pitch2) / 2
+    val pitch1Idx = scalePitchesToIdx(pitch1)
+    val pitch2Idx = scalePitchesToIdx(pitch2)
+    scalePitches((pitch1Idx + pitch2Idx) / 2)
   }
 
   def combine(note1: Note, note2: Note): Note = {
@@ -163,4 +151,17 @@ object Note {
       title = note1.title
     )
   }
+}
+
+case class Note(
+                 channel: Int,
+                 pitch: Int,
+                 velocity: Int,
+                 time: Int,
+                 length: Int,
+                 title: String
+               )
+
+object Note {
+
 }
